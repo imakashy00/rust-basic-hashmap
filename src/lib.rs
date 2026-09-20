@@ -1,3 +1,4 @@
+use std::iter::FromIterator;
 use std::borrow::Borrow;
 use std::hash::{ Hash, Hasher, DefaultHasher };
 use std::mem;
@@ -169,7 +170,7 @@ impl<K, V> HashMap<K, V> where K: Hash + Eq {
             new_buckets[index].push((key, value));
         }
         // (Replace old buckets with new ones)
-        let _= mem::replace(&mut self.buckets, new_buckets);
+        let _ = mem::replace(&mut self.buckets, new_buckets);
     }
 }
 
@@ -211,5 +212,15 @@ impl<'a, K, V> IntoIterator for &'a HashMap<K, V> {
     type IntoIter = Iter<'a, K, V>;
     fn into_iter(self) -> Self::IntoIter {
         Iter { map: self, bucket: 0, at: 0 }
+    }
+}
+
+impl<K, V> FromIterator<(K, V)> for HashMap<K, V> where K: Hash + Eq {
+    fn from_iter<I: IntoIterator<Item = (K, V)>>(iter: I) -> Self {
+        let mut map = HashMap::new();
+        for (key, value) in iter {
+            map.insert(key, value);
+        }
+        map
     }
 }
