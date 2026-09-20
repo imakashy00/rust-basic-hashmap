@@ -4,11 +4,6 @@ use std::hash::{ Hash, Hasher, DefaultHasher };
 use std::mem;
 
 const INITIAL_N_BUCKET_SIZE: usize = 1;
-pub struct Bucket<K, V> {
-    //List key value pairs that hash to the bucket
-    // Key has to be hashable and comparable
-    items: Vec<(K, V)>,
-}
 
 /* 
     We should put trait bounds only at the places where we implement the methods that use them
@@ -95,12 +90,14 @@ impl<K, V> HashMap<K, V> where K: Hash + Eq {
         // if let Some(entry) = bucket.iter_mut().find(|&&mut (ref ekey, _)| ekey == &key) {
         //     return Entry::Occupied(OccupiedEntry { entry: unsafe { &mut *(entry as *mut _) } }); // unsafe rust code
         // }
-        for entry in &mut self.buckets[bucket] {
-            if entry.0 == key {
-                return Entry::Occupied(OccupiedEntry { entry: unsafe { &mut *(entry as *mut _) } }); // unsafe rust code
-            }
+        
+        match self.buckets[bucket].iter().position(|&(ref ekey, _)| ekey == &key) {
+            Some(index) =>
+                Entry::Occupied(OccupiedEntry {
+                    entry: &mut self.buckets[bucket][index],
+                }),
+            None => Entry::Vacant(VacantEntry { map: self, key, bucket }),
         }
-        Entry::Vacant(VacantEntry { key, map: self, bucket })
     }
 
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
