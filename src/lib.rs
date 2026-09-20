@@ -214,6 +214,42 @@ impl<'a, K, V> IntoIterator for &'a HashMap<K, V> {
         Iter { map: self, bucket: 0, at: 0 }
     }
 }
+pub struct IntoIter<K, V> {
+    map: HashMap<K, V>,
+    bucket: usize,
+}
+
+impl<K, V> Iterator for IntoIter<K, V> {
+    type Item = (K, V);
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.map.buckets.get_mut(self.bucket) {
+                Some(bucket) => {
+                    match bucket.pop() {
+                        Some(pair) => {
+                            break Some(pair);
+                        }
+                        None => {
+                            self.bucket += 1;
+                            continue;
+                        }
+                    }
+                }
+                None => {
+                    break None;
+                }
+            }
+        }
+    }
+}
+
+impl<K, V> IntoIterator for HashMap<K, V> {
+    type Item = (K, V);
+    type IntoIter = IntoIter<K, V>;
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter { map: self, bucket: 0 }
+    }
+}
 
 impl<K, V> FromIterator<(K, V)> for HashMap<K, V> where K: Hash + Eq {
     fn from_iter<I: IntoIterator<Item = (K, V)>>(iter: I) -> Self {
