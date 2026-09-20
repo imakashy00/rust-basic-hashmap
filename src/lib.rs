@@ -65,11 +65,14 @@ impl<'a, K, V> Entry<'a, K, V> where K: Hash + Eq {
 }
 
 impl<K, V> HashMap<K, V> where K: Hash + Eq {
-    fn get_bucket<Q>(&self, key: &Q) -> usize where K: Borrow<Q>, Q: Hash + Eq + ?Sized {
+    fn get_bucket<Q>(&self, key: &Q) -> Option<usize> where K: Borrow<Q>, Q: Hash + Eq + ?Sized {
+        if self.buckets.is_empty() {
+            return None;
+        }
         let mut hasher = DefaultHasher::new();
         key.hash(&mut hasher);
         // understand it again at 30:00
-        (hasher.finish() % (self.buckets.len() as u64)) as usize // index into the buckets
+        Some((hasher.finish() % (self.buckets.len() as u64)) as usize) // index into the buckets
     }
 
     // Entry Api: We can get reference to where something will be inserted into the map
@@ -78,7 +81,7 @@ impl<K, V> HashMap<K, V> where K: Hash + Eq {
         if self.buckets.is_empty() || self.items > (4 * self.buckets.len()) / 5 {
             self.resize();
         }
-        let bucket = self.get_bucket(&key);
+        let bucket = self.get_bucket(&key).expect("empty bucket handled in get_bucket");
 
         /* 
         // cannot borrow `*bucket` as mutable more than once at a time
@@ -90,7 +93,7 @@ impl<K, V> HashMap<K, V> where K: Hash + Eq {
         // if let Some(entry) = bucket.iter_mut().find(|&&mut (ref ekey, _)| ekey == &key) {
         //     return Entry::Occupied(OccupiedEntry { entry: unsafe { &mut *(entry as *mut _) } }); // unsafe rust code
         // }
-        
+
         match self.buckets[bucket].iter().position(|&(ref ekey, _)| ekey == &key) {
             Some(index) =>
                 Entry::Occupied(OccupiedEntry {
@@ -106,7 +109,7 @@ impl<K, V> HashMap<K, V> where K: Hash + Eq {
             self.resize();
         }
         // hash the key
-        let bucket = self.get_bucket(&key);
+        let bucket = self.get_bucket(&key).expect("empty bucket handled in get_bucket");
         let bucket = &mut self.buckets[bucket]; // Rust let us overide variables
 
         // iterate through arary and find key that matches the key sent by the user
@@ -124,7 +127,7 @@ impl<K, V> HashMap<K, V> where K: Hash + Eq {
         // ref to Q where K can be borrowed as Q(If has reference to one can ge t refere to otehr without conversion)
         // As Q has Hash an Eq that is same as K Hash and Eq. Q doesnot need to be sized
         // keep the buckets in sorted order to make searching fast
-        let bucket = self.get_bucket(key);
+        let bucket = self.get_bucket(&key).expect("empty bucket handled in get_bucket");
         self.buckets[bucket]
             .iter()
             .find(|&(ekey, _)| { ekey.borrow() == key })
@@ -132,7 +135,7 @@ impl<K, V> HashMap<K, V> where K: Hash + Eq {
     }
 
     pub fn remove<Q>(&mut self, key: &Q) -> Option<V> where K: Borrow<Q>, Q: Hash + Eq + ?Sized {
-        let bucket = self.get_bucket(key);
+        let bucket = self.get_bucket(&key).expect("empty bucket handled in get_bucket");
         let bucket = &mut self.buckets[bucket];
         let ind = bucket.iter().position(|&(ref ekey, _)| ekey.borrow() == key)?;
         self.items -= 1;
