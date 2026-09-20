@@ -27,12 +27,79 @@ impl<K, V> HashMap<K, V> {
     }
 }
 
+pub struct OccupiedEntry<'a, K: 'a, V: 'a> {
+    entry: &'a mut (K, V), // key does not need to store bcz the element already has the key
+}
+pub struct VacantEntry<'a, K: 'a, V: 'a> {
+    key: K, // need to keep key so it can use when pushes
+    map: &'a mut HashMap<K, V>,
+    bucket: usize,
+}
+impl<'a, K: 'a, V: 'a> VacantEntry<'a, K, V> where K: Hash + Eq {
+    pub fn insert(self, value: V) -> &'a mut V {
+        if self.map.buckets.is_empty() || self.map.items > (4 * self.map.buckets.len()) / 5 {
+            self.map.resize();
+        }
+        self.map.buckets[self.bucket].push((self.key, value));
+        self.map.items += 1;
+        &mut self.map.buckets[self.bucket].last_mut().unwrap().1
+    }
+}
+pub enum Entry<'a, K: 'a, V: 'a> {
+    Occupied(OccupiedEntry<'a, K, V>),
+    Vacant(VacantEntry<'a, K, V>),
+}
+
+impl<'a, K, V> Entry<'a, K, V> where K: Hash + Eq {
+    pub fn or_insert(self, value: V) -> &'a mut V {
+        match self {
+            Entry::Occupied(el) => &mut el.entry.1,
+            Entry::Vacant(el) => el.insert(value),
+        }
+    }
+    pub fn or_insert_with<F>(self, maker: F) -> &'a mut V where F: FnOnce() -> V {
+        match self {
+            Entry::Occupied(el) => &mut el.entry.1,
+            Entry::Vacant(el) => el.insert(maker()),
+        }
+    }
+    pub fn default(self) -> &'a mut V where V: Default {
+        self.or_insert_with(Default::default)
+    }
+}
+
 impl<K, V> HashMap<K, V> where K: Hash + Eq {
     fn get_bucket<Q>(&self, key: &Q) -> usize where K: Borrow<Q>, Q: Hash + Eq + ?Sized {
         let mut hasher = DefaultHasher::new();
         key.hash(&mut hasher);
         // understand it again at 30:00
         (hasher.finish() % (self.buckets.len() as u64)) as usize // index into the buckets
+    }
+
+    // Entry Api: We can get reference to where something will be inserted into the map
+    pub fn entry<'a>(&'a mut self, key: K) -> Entry<'a, K, V> {
+        // resize the map if the size is 80%
+        if self.buckets.is_empty() || self.items > (4 * self.buckets.len()) / 5 {
+            self.resize();
+        }
+        let bucket = self.get_bucket(&key);
+
+        /* 
+        // cannot borrow `*bucket` as mutable more than once at a time
+        match bucket.iter_mut().find(|&&mut (ref ekey, _)| ekey == &key) {
+            Some(entry) => { Entry::Occupied(OccupiedEntry { entry }) }
+            None => { Entry::Vacant(VacantEntry { key, bucket }) }
+        }
+        */
+        // if let Some(entry) = bucket.iter_mut().find(|&&mut (ref ekey, _)| ekey == &key) {
+        //     return Entry::Occupied(OccupiedEntry { entry: unsafe { &mut *(entry as *mut _) } }); // unsafe rust code
+        // }
+        for entry in &mut self.buckets[bucket] {
+            if entry.0 == key {
+                return Entry::Occupied(OccupiedEntry { entry: unsafe { &mut *(entry as *mut _) } }); // unsafe rust code
+            }
+        }
+        Entry::Vacant(VacantEntry { key, map: self, bucket })
     }
 
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
@@ -44,13 +111,13 @@ impl<K, V> HashMap<K, V> where K: Hash + Eq {
         let bucket = self.get_bucket(&key);
         let bucket = &mut self.buckets[bucket]; // Rust let us overide variables
 
-        self.items += 1;
         // iterate through arary and find key that matches the key sent by the user
         for &mut (ref ekey, ref mut evalue) in bucket.iter_mut() {
             if ekey == &key {
                 return Some(mem::replace(evalue, value));
             }
         }
+        self.items += 1;
         bucket.push((key, value));
         None
     }
@@ -83,6 +150,7 @@ impl<K, V> HashMap<K, V> where K: Hash + Eq {
     pub fn contains_key<Q>(&self, key: &Q) -> bool where K: Borrow<Q>, Q: Hash + Eq + ?Sized {
         self.get(key).is_some()
     }
+
     fn resize(&mut self) {
         let target_size = match self.buckets.len() {
             0 => INITIAL_N_BUCKET_SIZE,
@@ -101,7 +169,7 @@ impl<K, V> HashMap<K, V> where K: Hash + Eq {
             new_buckets[index].push((key, value));
         }
         // (Replace old buckets with new ones)
-        mem::replace(&mut self.buckets, new_buckets);
+        let _= mem::replace(&mut self.buckets, new_buckets);
     }
 }
 
